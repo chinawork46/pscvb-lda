@@ -1,7 +1,7 @@
 #include <vector>
 #include <map>
 
-#define NUM_THREADS 16
+#define NUM_THREADS 6	
 #define LOCK_NUM 1024
 #define BIT_MASK 1023
 #define THREADING
@@ -92,8 +92,13 @@ class SCVB
 		void reset_rho_phi_t();
 		void reset_rho_theta_t();
 
+		int words_to_output;
+
+		void sort_col(int* idx_array, SVB_FLOAT** two_dim_data, int col_idx, int num_idx, bool desc);
+		inline void exchange(int* x1, int* x2);
+
 	public:
-		SCVB(const char* docs_file, int k_topics, int m_batchsize);
+		SCVB(const char* docs_file, int k_topics, int m_batchsize, int words_to_output);
 		~SCVB();
 
 		void miniBatch(int*  doc_ids, int n_docs);

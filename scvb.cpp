@@ -40,7 +40,7 @@ SVB_FLOAT SCVB::get_rho_theta()
 	return res;
 }
 #endif
-
+	
 void SCVB::reset_rho_phi_t()
 {
 	this->rho_phi_t = 0.0;
@@ -211,7 +211,7 @@ SCVB::~SCVB()
 	free(this->N_z_cap);
 }
 
-SCVB::SCVB(const char* docs_file, int k_topics, int m_batchsize)
+SCVB::SCVB(const char* docs_file, int k_topics, int m_batchsize, int words_to_output)
 {
 	int i, doc_id, count;
 
@@ -223,6 +223,7 @@ SCVB::SCVB(const char* docs_file, int k_topics, int m_batchsize)
 	this->phi_tau = 100;
 	this->theta_tau = 1000;
 	this->rho_phi_t = 0.0;
+	this->words_to_output = words_to_output;
 	
 	//initialize doc file and corpus_count
 	init_docs(docs_file, &this->doc_wordid, &this->Cj);
@@ -514,26 +515,86 @@ void SCVB::write_to_file(char* file_name)
 	fclose(fp);
 }
 
+void SCVB::exchange(int* x1, int* x2)
+{
+	int temp = *x1;
+
+	*x1 = *x2;
+	*x2 = temp;
+}
+
+void SCVB::sort_col(int* idx_array, SVB_FLOAT** two_dim_data, int col_idx, int num_idx, bool desc)
+{
+	int comparator;
+	int lidx = 1, ridx = num_idx - 1;
+
+	if (num_idx < 2)
+		return;
+
+	comparator = idx_array[0];
+
+	while (lidx < ridx)
+	{
+		while ((lidx < num_idx) &&
+			   (two_dim_data[idx_array[lidx]][col_idx] > two_dim_data[comparator][col_idx]))
+			++lidx;
+
+		if ((lidx == num_idx) || (lidx >= ridx))
+			break;
+
+		while ((ridx > lidx) &&
+			   (two_dim_data[idx_array[ridx]][col_idx] < two_dim_data[comparator][col_idx]))
+			--ridx;
+
+		if ((ridx == -1) || (ridx == lidx))
+			break;
+
+		exchange(&idx_array[lidx], &idx_array[ridx]);
+		++lidx;
+		--ridx;
+	}
+
+	if (lidx >= num_idx)
+		lidx = num_idx - 1;
+
+	while (two_dim_data[idx_array[lidx]][col_idx] < two_dim_data[comparator][col_idx])
+		--lidx;
+
+	exchange(&idx_array[0], &idx_array[lidx]);
+
+	this->sort_col(&idx_array[0], two_dim_data, col_idx, lidx, desc);
+	this->sort_col(&idx_array[lidx + 1], two_dim_data, col_idx, num_idx - lidx - 1, desc);
+}	
+
 void SCVB::write_output_files()
 {
 	const char* topic_file = "topics.txt";
 	const char* doctopic_file = "doctopic.txt";
+	int* idxArray = (int*)malloc(sizeof(int) * this->corpus_count);
 
 	FILE* fp = fopen(topic_file, "w");
 
-	for (int word_iter = 1; word_iter < this->corpus_count + 1; ++word_iter)
+	for (int k = 0; k < this->k_topics; ++k)
 	{
 		SVB_FLOAT norm = 0.0;
 
-		for (int k = 0; k < this->k_topics; ++k)
+		for (int word_iter = 1; word_iter < this->corpus_count + 1; ++word_iter)
 			norm += this->N_phi[word_iter][k];
 
-		for (int k = 0; k < this->k_topics; ++k)
-			fprintf(fp, "%lf ", this->N_phi[word_iter][k] / norm);
+		for (int i = 0; i < this->corpus_count; ++i)
+			idxArray[i] = i + 1;
+
+		this->sort_col(idxArray, this->N_phi, k, this->corpus_count, true);
+
+		for (int i = 0; i < this->words_to_output - 1; ++i)
+			fprintf(fp, "%d:%lf, ", idxArray[i], this->N_phi[idxArray[i]][k] / norm);
+		fprintf(fp, "%d:%lf", idxArray[this->words_to_output - 1], this->N_phi[idxArray[this->words_to_output - 1]][k] / norm);
 
 		fprintf(fp, "\n");
 	}
 	fclose(fp);
+
+	free(idxArray);
 
 	fp = fopen(doctopic_file, "w");
 
@@ -544,8 +605,9 @@ void SCVB::write_output_files()
 		for (int k = 0; k < this->k_topics; ++k)
 			norm += this->N_theta[doc_iter][k];
 
-		for (int k = 0; k < this->k_topics; ++k)
-			fprintf(fp, "%lf ", this->N_theta[doc_iter][k] / norm);
+		for (int k = 0; k < this->k_topics - 1; ++k)
+			fprintf(fp, "%lf, ", this->N_theta[doc_iter][k] / norm);
+		fprintf(fp, "%lf", this->N_theta[doc_iter][this->k_topics - 1] / norm);
 
 		fprintf(fp, "\n");
 	}

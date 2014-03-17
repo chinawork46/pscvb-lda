@@ -1,2 +1,4 @@
+CC=g++-4.9
+
 all:
-	g++-4.9 -o main main.cpp scvb.cpp -O3 -fopenmp -msse4 -std=c++11
+	${CC} -o main main.cpp scvb.cpp -O3 -fopenmp -msse4 -std=c++11
