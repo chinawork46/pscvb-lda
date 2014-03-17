@@ -25,13 +25,13 @@ int main(int argc, char* argv[])
 
 	for (int i = 0; i < iterations; ++i)
 	{
+		printf("Iteration: %d\n", i);	
 		scvb->run();
-		scvb->write_to_file(buffer);
-		//printf("Perplexity: %lf\n", scvb->perplexity());
+		printf("Perplexity: %lf\n", scvb->perplexity());
 	}
 	
-	printf("Iteration: %d\n", i);		
 	sprintf(buffer, "nips_%d.txt", iterations);
+	scvb->write_to_file(buffer);
 	scvb->write_output_files();
 	
 	return 0;

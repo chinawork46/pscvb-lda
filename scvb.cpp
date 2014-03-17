@@ -640,9 +640,11 @@ SVB_FLOAT SCVB::perplexity()
 				sum_k += theta * phi;
 			}
 
-			res += log(sum_k);
+			res += log(sum_k) / log(2);
 		}
 	}
+
+	res = exp(-1.0 * res / this->total_count);
 
 	return res;
 }
