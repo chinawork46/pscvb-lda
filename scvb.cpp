@@ -640,7 +640,7 @@ SVB_FLOAT SCVB::perplexity()
 				sum_k += theta * phi;
 			}
 
-			res += log(sum_k) / log(2);
+			res += log(sum_k) * wc.word_count / log(2);
 		}
 	}
 
