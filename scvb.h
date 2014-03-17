@@ -1,5 +1,4 @@
 #include <vector>
-#include <map>
 
 #define NUM_THREADS 6	
 #define LOCK_NUM 1024

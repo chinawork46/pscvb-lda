@@ -576,19 +576,20 @@ void SCVB::write_output_files()
 
 	for (int k = 0; k < this->k_topics; ++k)
 	{
-		SVB_FLOAT norm = 0.0;
-
-		for (int word_iter = 1; word_iter < this->corpus_count + 1; ++word_iter)
-			norm += this->N_phi[word_iter][k];
-
 		for (int i = 0; i < this->corpus_count; ++i)
 			idxArray[i] = i + 1;
 
 		this->sort_col(idxArray, this->N_phi, k, this->corpus_count, true);
 
+		SVB_FLOAT val;
 		for (int i = 0; i < this->words_to_output - 1; ++i)
-			fprintf(fp, "%d:%lf, ", idxArray[i], this->N_phi[idxArray[i]][k] / norm);
-		fprintf(fp, "%d:%lf", idxArray[this->words_to_output - 1], this->N_phi[idxArray[this->words_to_output - 1]][k] / norm);
+		{
+			val = (this->N_phi[idxArray[i]][k] + this->eta) / (this->N_z[k] + this->corpus_count * this->eta);
+			fprintf(fp, "%d:%lf, ", idxArray[i], val);
+		}
+
+		val = (this->N_phi[idxArray[this->words_to_output - 1]][k] + this->eta) / (this->N_z[k] + this->corpus_count * this->eta);
+		fprintf(fp, "%d:%lf", idxArray[this->words_to_output - 1], val);
 
 		fprintf(fp, "\n");
 	}
@@ -606,8 +607,8 @@ void SCVB::write_output_files()
 			norm += this->N_theta[doc_iter][k];
 
 		for (int k = 0; k < this->k_topics - 1; ++k)
-			fprintf(fp, "%lf, ", this->N_theta[doc_iter][k] / norm);
-		fprintf(fp, "%lf", this->N_theta[doc_iter][this->k_topics - 1] / norm);
+			fprintf(fp, "%lf, ", (this->N_theta[doc_iter][k] + this->alpha) / (norm + this->alpha * this->k_topics));
+		fprintf(fp, "%lf", (this->N_theta[doc_iter][this->k_topics - 1] + this->alpha) / (norm + this->alpha * this->k_topics));
 
 		fprintf(fp, "\n");
 	}
@@ -640,7 +641,7 @@ SVB_FLOAT SCVB::perplexity()
 				sum_k += theta * phi;
 			}
 
-			res += log(sum_k) * wc.word_count / log(2);
+			res += log(sum_k) * wc.word_count;
 		}
 	}
 
