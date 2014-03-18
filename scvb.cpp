@@ -424,16 +424,34 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 				int lock_id = wc.word_id & BIT_MASK;
 				omp_set_lock(&this->word_lock[lock_id]);
 				for (int k = 0; k < this->k_topics; ++k)
+				{
+#ifdef CLUMPING
+					this->N_phi_cap[wc.word_id][k] += local_gamma_ij[k] * wc.word_count;
+#else
 					this->N_phi_cap[wc.word_id][k] += local_gamma_ij[k];
+#endif			
+				}				
 				omp_unset_lock(&this->word_lock[lock_id]);
 				
 				for (int k = 0; k < this->k_topics; ++k)
+				{
+#ifdef CLUMPING
+					this->thread_N_z_caps[tid][k] += local_gamma_ij[k] * wc.word_count;
+#else
 					this->thread_N_z_caps[tid][k] += local_gamma_ij[k];
+#endif
+				}	
 #else
 				for (int k = 0; k < this->k_topics; ++k)
 				{
+#ifdef CLUMPING
+					this->N_phi_cap[wc.word_id][k] += local_gamma_ij[k]* wc.word_count;
+					this->N_z_cap[k] += local_gamma_ij[k] * wc.word_count;
+#else
 					this->N_phi_cap[wc.word_id][k] += local_gamma_ij[k];
 					this->N_z_cap[k] += local_gamma_ij[k];
+#endif				
+					
 				}
 #endif
 
