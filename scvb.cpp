@@ -409,10 +409,7 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 	//Should use n_docs rather than this->m_batchsize, since the last batch could be smaller
 	//Calculate rho_theta_t for each thread, this is really imporatant
 	for (int i = 1; i < n_docs; ++i)
-<<<<<<< HEAD
-=======
 	//@# The step-sizes in clumping and non-clumping should be figure out clearly later
->>>>>>> 2c8f66f4fd35a78099d803b5e326219a7b5a0a18
 #ifdef CLUMPING
 		if (this->doc_wordid[doc_ids[i - 1]] == NULL)
 			this->rho_theta_ts[i] = this->rho_theta_ts[i - 1];
@@ -464,14 +461,10 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 					Equation6(this->Cj[doc_id], local_gamma_ij, rho_theta, doc_id, wc.word_count);
 #else
 					Equation6(this->Cj[doc_id], local_gamma_ij, rho_theta, doc_id);
-<<<<<<< HEAD
-				}
-=======
 #endif		
 		
 #ifndef CLUMPING
 				} //end for word_count
->>>>>>> 2c8f66f4fd35a78099d803b5e326219a7b5a0a18
 #endif
 			}
 		}
