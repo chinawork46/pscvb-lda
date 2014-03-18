@@ -1,8 +1,8 @@
 #include <vector>
 
 #define NUM_THREADS 6	
-#define LOCK_NUM 1024
-#define BIT_MASK 1023
+#define LOCK_NUM 4096
+#define BIT_MASK 4095
 #define THREADING
 #define CLUMPING
 #ifdef THREADING
@@ -95,6 +95,10 @@ class SCVB
 
 		void sort_col(int* idx_array, SVB_FLOAT** two_dim_data, int col_idx, int num_idx, bool desc);
 		inline void exchange(int* x1, int* x2);
+
+		//Functions to parse input files
+		//The first element of ibuf must be initialized by the caller.
+		inline int analyse(char *buf, int blen, int* ibuf, int ilen, int istart = 0);
 
 	public:
 		SCVB(const char* docs_file, int k_topics, int m_batchsize, int words_to_output);

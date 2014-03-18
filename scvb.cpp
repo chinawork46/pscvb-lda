@@ -13,7 +13,7 @@ SVB_FLOAT SCVB::get_rho_phi()
 {
 	SVB_FLOAT res;
 
-	res = this->rho_s / pow(this->phi_tau + this->rho_phi_t, this->kappa);
+	res = 1 / pow(this->phi_tau + this->rho_phi_t, this->kappa);
 	this->rho_phi_t += 1.0;
 
 	return res;
@@ -141,7 +141,7 @@ void SCVB::Equation7(SVB_FLOAT** N_phi_cap, SVB_FLOAT rho_phi, double mult)
 	for (word_iter = 1; word_iter < this->corpus_count + 1; ++word_iter)
     	for (topic_iter = 0; topic_iter < this->k_topics; ++topic_iter)
     		this->N_phi[word_iter][topic_iter] = phi_mul * this->N_phi[word_iter][topic_iter] \
-    											 + rho_phi * N_phi_cap[word_iter][topic_iter];
+    											 + rho_phi * N_phi_cap[word_iter][topic_iter] * mult;
 #endif
 	
 }
@@ -154,6 +154,27 @@ void SCVB::Equation8(SVB_FLOAT* Nz_cap, SVB_FLOAT rho_phi)
 
 	for (topic_iter = 0; topic_iter < this->k_topics; ++topic_iter)
 		this->N_z[topic_iter] = phi_mul * this->N_z[topic_iter] + rho_phi * Nz_cap[topic_iter];
+}
+
+int SCVB::analyse(char *buf, int blen, int* ibuf, int ilen, int istart)
+{
+	int i;
+	
+	i = istart;
+
+    for (char* p = buf; *p && (p - buf < blen); ++p)
+        if ((*p == ' ') || (*p == '\n'))
+            ibuf[++i] = 0;
+        else
+            ibuf[i] = ibuf[i] * 10 + *p - '0';
+
+    if (i >= ilen)
+    {
+    	printf("Input buffer is not set up correctly.\n Program failed.\n");
+    	exit(-1);
+    }
+
+    return i + 1;
 }
 
 void SCVB::init_docs(const char* file_name, vector<word_id_count>*** pdocs, int** pCj)
@@ -170,9 +191,7 @@ void SCVB::init_docs(const char* file_name, vector<word_id_count>*** pdocs, int*
 	//doc_count
 	//corpus
 	//total_words
-	fscanf(fp, "%d", &this->doc_count);
-	fscanf(fp, "%d", &this->corpus_count);
-	fscanf(fp, "%d", &non_used);
+	fscanf(fp, "%d%d%d\n", &this->doc_count, &this->corpus_count, &non_used);
 	this->total_count = 0;
 
 	//initialize docs, cj
@@ -189,20 +208,70 @@ void SCVB::init_docs(const char* file_name, vector<word_id_count>*** pdocs, int*
 
 	int doc_id, word_id, word_count;
 
-	while (fscanf(fp, "%d%d%d", &doc_id, &word_id, &word_count) != EOF)
+	int buf_size = 4 * 1024 * 1024;
+	int ibuf_size = 2 * 1024 * 1024;
+	char* buf = (char*)malloc(buf_size);
+	int* ibuf = (int*)malloc(sizeof(int) * ibuf_size);
+	int istart = 0;
+
+	ibuf[0] = 0;
+
+	while (true)
 	{
-		word_id_count wc;
+		int blen = fread(buf, 1, buf_size, fp);
+		int ilen;
 
-		this->total_count += word_count;
-		Cj[doc_id] += word_count;
-		if (docs[doc_id] == NULL)
-			docs[doc_id] = new vector<word_id_count>();
+		if (blen == 0)
+			break;
 
-		wc.word_id = word_id;
-		wc.word_count = word_count;
-		docs[doc_id]->push_back(wc);
+		ilen = analyse(buf, buf_size, ibuf, ibuf_size, istart);
+
+		//Each tuples contains 3 elements, we are not sure if
+		//the last tuples are completed, so don't process it for now.
+		int num_tuples = (ilen - 2) / 3;
+		int num_elems = num_tuples * 3;
+		istart = ilen - num_elems - 1;
+
+		for (int i = 0; i < num_elems; i += 3)
+		{
+			word_id_count wc;
+			doc_id = ibuf[i];
+			word_id = ibuf[i + 1];
+			word_count = ibuf[i + 2];
+
+			this->total_count += word_count;
+			Cj[doc_id] += word_count;
+			if (docs[doc_id] == NULL)
+				docs[doc_id] = new vector<word_id_count>();
+
+			wc.word_id = word_id;
+			wc.word_count = word_count;
+			docs[doc_id]->push_back(wc);
+		}
+
+		for (int i = 0; i < ilen - num_elems; ++i)
+			ibuf[i] = ibuf[i + num_elems];
 	}
 
+	for (int i = 0; i < 3; i += 3)
+		{
+			word_id_count wc;
+			doc_id = ibuf[i];
+			word_id = ibuf[i + 1];
+			word_count = ibuf[i + 2];
+
+			this->total_count += word_count;
+			Cj[doc_id] += word_count;
+			if (docs[doc_id] == NULL)
+				docs[doc_id] = new vector<word_id_count>();
+
+			wc.word_id = word_id;
+			wc.word_count = word_count;
+			docs[doc_id]->push_back(wc);
+		}
+
+	free(buf);
+	free(ibuf);
 	fclose(fp);
 }
 
@@ -220,13 +289,14 @@ SCVB::SCVB(const char* docs_file, int k_topics, int m_batchsize, int words_to_ou
 	this->kappa = 0.9;
 	this->burn_in_passes = 0;
 	this->rho_s = 10;
-	this->phi_tau = 100;
+	this->phi_tau = 10;
 	this->theta_tau = 1000;
 	this->rho_phi_t = 0.0;
 	this->words_to_output = words_to_output;
 	
 	//initialize doc file and corpus_count
 	init_docs(docs_file, &this->doc_wordid, &this->Cj);
+	printf("Load docs finished\n");
 
 	//initialize all the variables
 	this->alpha = 0.1;
@@ -346,7 +416,7 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 
 	//this->m_batchsize is the same as n_docs, find a way to elimiate this ugly style
 	//Calculate rho_theta_t for each thread, this is really imporatant
-	for (int i = 1; i < this->m_batchsize; ++i)
+	for (int i = 1; i < n_docs; ++i)
 #ifdef CLUMPING
 		if (this->doc_wordid[doc_ids[i - 1]] == NULL)
 			this->rho_theta_ts[i] = this->rho_theta_ts[i - 1];
@@ -384,9 +454,10 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 			for (auto word_iter = this->doc_wordid[doc_id]->begin(); word_iter != this->doc_wordid[doc_id]->end(); ++word_iter)
 			{
 				word_id_count wc = *word_iter;
-
+#ifndef CLUMPING
 				for (int i = 0; i < wc.word_count; ++i)
 				{
+#endif
 #ifdef THREADING
 				SVB_FLOAT rho_theta = get_rho_theta(&rho_theta_t);
 #else
@@ -397,8 +468,8 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 					Equation6(this->Cj[doc_id], local_gamma_ij, rho_theta, doc_id, wc.word_count);
 #else
 					Equation6(this->Cj[doc_id], local_gamma_ij, rho_theta, doc_id);
-#endif				
 				}
+#endif
 			}
 		}
 
@@ -459,7 +530,6 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 	SVB_FLOAT mult = (SVB_FLOAT)this->total_count / (SVB_FLOAT)total_Cj;
 	//for (int i = 1; i < this->corpus_count + 1; ++i)
 	//	vector_mul(this->N_phi_cap[i], mult, this->k_topics);
-
 	vector_mul(this->N_z_cap, mult, this->k_topics);
 
 	//Execute the update to N_phi and N_z
@@ -494,7 +564,7 @@ void SCVB::run()
 			t += 1;
 		}
 
-		miniBatch(docs, this->m_batchsize);
+		miniBatch(docs, count);
 		i += count;
 	}
 
@@ -534,7 +604,7 @@ void SCVB::sort_col(int* idx_array, SVB_FLOAT** two_dim_data, int col_idx, int n
 	comparator = idx_array[0];
 
 	while (lidx < ridx)
-	{
+	{sort_col
 		while ((lidx < num_idx) &&
 			   (two_dim_data[idx_array[lidx]][col_idx] > two_dim_data[comparator][col_idx]))
 			++lidx;
@@ -546,7 +616,7 @@ void SCVB::sort_col(int* idx_array, SVB_FLOAT** two_dim_data, int col_idx, int n
 			   (two_dim_data[idx_array[ridx]][col_idx] < two_dim_data[comparator][col_idx]))
 			--ridx;
 
-		if ((ridx == -1) || (ridx == lidx))
+		if (ridx == lidx)
 			break;
 
 		exchange(&idx_array[lidx], &idx_array[ridx]);
