@@ -395,16 +395,8 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 	int total_Cj = 0;
 
 	//initialzie total word count for all docs
-#ifdef CLUMPING
-	for (int i = 0; i < n_docs; ++i)
-		if (this->doc_wordid[doc_ids[i]] == NULL)
-			continue;
-		else
-			total_Cj += this->doc_wordid[doc_ids[i]]->size();
-#else
 	for (int i = 0; i < n_docs; ++i)
 		total_Cj += this->Cj[doc_ids[i]];
-#endif
 	//initialize N_phi_cap N_z_cap
 	//zero_2dim(this->N_phi_cap, 1, this->corpus_count + 1, this->k_topics);
 	memset(this->N_phi_cap[1], 0, this->corpus_count * this->k_topics * sizeof(SVB_FLOAT));
@@ -414,13 +406,17 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 	for (int i = 0; i < this->num_threads; ++i)
 		memset(this->thread_N_z_caps[i], 0, sizeof(SVB_FLOAT) * this->k_topics);
 
-	//this->m_batchsize is the same as n_docs, find a way to elimiate this ugly style
+	//Should use n_docs rather than this->m_batchsize, since the last batch could be smaller
 	//Calculate rho_theta_t for each thread, this is really imporatant
 	for (int i = 1; i < n_docs; ++i)
+<<<<<<< HEAD
+=======
+	//@# The step-sizes in clumping and non-clumping should be figure out clearly later
+>>>>>>> 2c8f66f4fd35a78099d803b5e326219a7b5a0a18
 #ifdef CLUMPING
 		if (this->doc_wordid[doc_ids[i - 1]] == NULL)
 			this->rho_theta_ts[i] = this->rho_theta_ts[i - 1];
-		else
+		else	
 			this->rho_theta_ts[i] = this->doc_wordid[doc_ids[i - 1]]->size() * (1 + this->burn_in_passes) 
 									+ this->rho_theta_ts[i - 1];	
 		
@@ -468,7 +464,14 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 					Equation6(this->Cj[doc_id], local_gamma_ij, rho_theta, doc_id, wc.word_count);
 #else
 					Equation6(this->Cj[doc_id], local_gamma_ij, rho_theta, doc_id);
+<<<<<<< HEAD
 				}
+=======
+#endif		
+		
+#ifndef CLUMPING
+				} //end for word_count
+>>>>>>> 2c8f66f4fd35a78099d803b5e326219a7b5a0a18
 #endif
 			}
 		}
@@ -498,17 +501,34 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 				int lock_id = wc.word_id & BIT_MASK;
 				omp_set_lock(&this->word_lock[lock_id]);
 				for (int k = 0; k < this->k_topics; ++k)
+				{
+#ifdef CLUMPING
+					this->N_phi_cap[wc.word_id][k] += local_gamma_ij[k] * wc.word_count;
+#else
 					this->N_phi_cap[wc.word_id][k] += local_gamma_ij[k];
+#endif			
+				}				
 				omp_unset_lock(&this->word_lock[lock_id]);
 				
 				for (int k = 0; k < this->k_topics; ++k)
-					this->thread_N_z_caps[tid][k] += local_gamma_ij[k];
+				{
+#ifdef CLUMPING
+					this->thread_N_z_caps[tid][k] += local_gamma_ij[k] * wc.word_count;
 #else
-
+					this->thread_N_z_caps[tid][k] += local_gamma_ij[k];
+#endif
+				}	
+#else
 				for (int k = 0; k < this->k_topics; ++k)
 				{
+#ifdef CLUMPING
+					this->N_phi_cap[wc.word_id][k] += local_gamma_ij[k]* wc.word_count;
+					this->N_z_cap[k] += local_gamma_ij[k] * wc.word_count;
+#else
 					this->N_phi_cap[wc.word_id][k] += local_gamma_ij[k];
 					this->N_z_cap[k] += local_gamma_ij[k];
+#endif				
+					
 				}
 #endif
 
@@ -523,7 +543,7 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 	for (int i = 0; i < this->num_threads; ++i)
 		for (int k = 0; k < this->k_topics; ++k)
 			this->N_z_cap[k] += this->thread_N_z_caps[i][k];
-
+	//@# ?
 	this->rho_theta_ts[0] = total_Cj;
 #endif
 	//Multiplier the normalizer for the caps
