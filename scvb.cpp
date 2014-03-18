@@ -141,7 +141,7 @@ void SCVB::Equation7(SVB_FLOAT** N_phi_cap, SVB_FLOAT rho_phi, double mult)
 	for (word_iter = 1; word_iter < this->corpus_count + 1; ++word_iter)
     	for (topic_iter = 0; topic_iter < this->k_topics; ++topic_iter)
     		this->N_phi[word_iter][topic_iter] = phi_mul * this->N_phi[word_iter][topic_iter] \
-    											 + rho_phi * N_phi_cap[word_iter][topic_iter];
+    											 + rho_phi * N_phi_cap[word_iter][topic_iter] * mult;
 #endif
 	
 }
@@ -339,10 +339,11 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 	//Should use n_docs rather than this->m_batchsize, since the last batch could be smaller
 	//Calculate rho_theta_t for each thread, this is really imporatant
 	for (int i = 1; i < n_docs; ++i)
+	//@# The step-sizes in clumping and non-clumping should be figure out clearly later
 #ifdef CLUMPING
 		if (this->doc_wordid[doc_ids[i - 1]] == NULL)
 			this->rho_theta_ts[i] = this->rho_theta_ts[i - 1];
-		else	//@# The step-size in clumping should be figure out clearly later
+		else	
 			this->rho_theta_ts[i] = this->doc_wordid[doc_ids[i - 1]]->size() * (1 + this->burn_in_passes) 
 									+ this->rho_theta_ts[i - 1];	
 		
@@ -376,9 +377,10 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 			for (auto word_iter = this->doc_wordid[doc_id]->begin(); word_iter != this->doc_wordid[doc_id]->end(); ++word_iter)
 			{
 				word_id_count wc = *word_iter;
-
+#ifndef CLUMPING
 				for (int i = 0; i < wc.word_count; ++i)
 				{
+#endif
 #ifdef THREADING
 				SVB_FLOAT rho_theta = get_rho_theta(&rho_theta_t);
 #else
@@ -389,8 +391,11 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 					Equation6(this->Cj[doc_id], local_gamma_ij, rho_theta, doc_id, wc.word_count);
 #else
 					Equation6(this->Cj[doc_id], local_gamma_ij, rho_theta, doc_id);
-#endif				
-				}
+#endif		
+		
+#ifndef CLUMPING
+				} //end for word_count
+#endif
 			}
 		}
 
@@ -425,7 +430,6 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 				for (int k = 0; k < this->k_topics; ++k)
 					this->thread_N_z_caps[tid][k] += local_gamma_ij[k];
 #else
-
 				for (int k = 0; k < this->k_topics; ++k)
 				{
 					this->N_phi_cap[wc.word_id][k] += local_gamma_ij[k];
@@ -444,7 +448,7 @@ void SCVB::miniBatch(int* doc_ids, int n_docs)
 	for (int i = 0; i < this->num_threads; ++i)
 		for (int k = 0; k < this->k_topics; ++k)
 			this->N_z_cap[k] += this->thread_N_z_caps[i][k];
-
+	//@# ?
 	this->rho_theta_ts[0] = total_Cj;
 #endif
 	//Multiplier the normalizer for the caps
